@@ -1,0 +1,26 @@
+{
+  "name": "braille-grid",
+  "version": "0.1.0",
+  "description": "Browser driver for an 8x8 electromagnetic braille pin grid device. Draw shapes into an 8x8 array; the library handles the device's serial protocol and pin numbering.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["braille", "accessibility", "web-serial"],
+  "author": "",
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "typescript": "^7.0.2"
+  }
+}

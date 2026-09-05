@@ -25,6 +25,7 @@ const COMMAND_TIMEOUT_MS = 5000;
 export class BrailleGrid {
   private queue: Promise<unknown> = Promise.resolve();
   private state: boolean[][];
+  private changeListeners = new Set<(state: boolean[][]) => void>();
 
   constructor(private transport: Transport) {
     this.state = BrailleGrid.blankGrid();
@@ -32,6 +33,33 @@ export class BrailleGrid {
 
   private static blankGrid(): boolean[][] {
     return Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(false));
+  }
+
+  /** Notifies subscribers with a snapshot of the current state. */
+  private emitChange(): void {
+    if (this.changeListeners.size === 0) return;
+    const snapshot = this.state.map((row) => [...row]);
+    for (const cb of this.changeListeners) cb(snapshot);
+  }
+
+  /**
+   * Subscribe to live dot-state changes. Fires with a full 8x8 snapshot
+   * (not a diff) every time any dot changes, so consumers never need to
+   * track state themselves -- useful for things like an external monitor
+   * or overlay that just wants to mirror what's currently displayed.
+   */
+  onChange(cb: (state: boolean[][]) => void): void {
+    this.changeListeners.add(cb);
+  }
+
+  /** Unsubscribe a callback previously passed to onChange. */
+  offChange(cb: (state: boolean[][]) => void): void {
+    this.changeListeners.delete(cb);
+  }
+
+  /** Returns a snapshot of the current dot state (8x8, true = raised). */
+  getState(): boolean[][] {
+    return this.state.map((row) => [...row]);
   }
 
   async connect(): Promise<void> {
@@ -88,6 +116,7 @@ export class BrailleGrid {
     const { cell, dot } = pixelToCellDot(row, col);
     await this.send(`em.cell${cell}_dot${dot}_${up ? 'up' : 'down'}()`);
     this.state[row][col] = up;
+    this.emitChange();
   }
 
   /**
@@ -116,12 +145,14 @@ export class BrailleGrid {
   async allUp(): Promise<void> {
     await this.send('em.all_up()');
     this.state = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(true));
+    this.emitChange();
   }
 
   /** Lower every dot. */
   async allDown(): Promise<void> {
     await this.send('em.all_down()');
     this.state = BrailleGrid.blankGrid();
+    this.emitChange();
   }
 
   /**

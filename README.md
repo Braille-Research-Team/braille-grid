@@ -61,18 +61,38 @@ electrically; it does not lower any dots.
   with `drawShape()`, `setDot()`, `allUp()`, `allDown()`, `safeState()`.
 - `useBrailleGrid.ts` -- React hook wrapping the above for use in Next.js
   components; manages connection state and exposes `connect`/`drawShape`.
-- `shapes.ts` -- example outline generators (square, circle, triangle) to
-  demonstrate the array format. Treat these as a starting point, not a
-  finished shape library -- especially the circle, which you'll likely
-  want to hand-tune once you see it on the real 8x8 grid.
 - `ExampleShapeLesson.tsx` -- minimal example component wiring it all
-  together, including the Safari fallback message.
+  together, including the Safari fallback message and an example of
+  defining a one-off shape inline (see "Defining shapes" below).
+
+## Defining shapes
+
+A shape is nothing more than an 8x8 array (the `Bitmap` type exported from
+this library), truthy = dot raised:
+
+```ts
+import type { Bitmap } from 'braille-grid';
+
+function squareOutline(): Bitmap {
+  const grid: boolean[][] = Array.from({ length: 8 }, () => Array(8).fill(false));
+  for (let i = 0; i < 8; i++) {
+    grid[0][i] = grid[7][i] = grid[i][0] = grid[i][7] = true;
+  }
+  return grid;
+}
+```
+
+There's no registration step, no format beyond "8x8 array," and nothing
+in this library to update. DotQuest keeps its shape set in its own
+`lib/services/shapes.ts`; other consumers of this library are free to
+define shapes however suits them (hand-authored arrays, generated from a
+formula, pulled from lesson content, etc).
 
 ## Usage
 
 ```tsx
 import { useBrailleGrid } from './useBrailleGrid';
-import { circleOutline } from './shapes';
+import { circleOutline } from '@/lib/services/shapes'; // wherever your app defines shapes
 
 function ShapeProblem() {
   const { state, connect, drawShape } = useBrailleGrid();

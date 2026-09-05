@@ -1,13 +1,22 @@
 // ExampleShapeLesson.tsx
-//
-// Minimal example of wiring this into a DotQuest lesson component.
-// Not meant to be a finished component -- just shows the shape of the
-// integration: connect once, then drawShape() per problem.
 
 'use client';
 
 import { useBrailleGrid } from './useBrailleGrid';
-import { circleOutline, squareOutline, triangleOutline } from './shapes';
+import type { Bitmap } from './mapping';
+
+function exampleCircleOutline(): Bitmap {
+  const grid: boolean[][] = Array.from({ length: 8 }, () => Array(8).fill(false));
+  const center = 3.5;
+  const radius = 3.5;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const dist = Math.sqrt((col - center) ** 2 + (row - center) ** 2);
+      if (Math.abs(dist - radius) <= 0.9) grid[row][col] = true;
+    }
+  }
+  return grid;
+}
 
 export function ExampleShapeLesson() {
   const { state, error, connect, drawShape, clear } = useBrailleGrid();
@@ -30,9 +39,7 @@ export function ExampleShapeLesson() {
         </button>
       ) : (
         <>
-          <button onClick={() => drawShape(circleOutline())}>Show circle</button>
-          <button onClick={() => drawShape(squareOutline())}>Show square</button>
-          <button onClick={() => drawShape(triangleOutline())}>Show triangle</button>
+          <button onClick={() => drawShape(exampleCircleOutline())}>Show example shape</button>
           <button onClick={() => clear()}>Clear</button>
         </>
       )}

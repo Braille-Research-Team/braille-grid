@@ -11,6 +11,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { BrailleGrid } from './brailleGrid';
 import { WebSerialTransport } from './webSerialTransport';
+import { WebHidGrid } from './webHidGrid';
+import type { GridDevice } from './gridDevice';
 import type { Bitmap } from './mapping';
 
 export type BrailleGridConnectionState =
@@ -27,36 +29,39 @@ export interface UseBrailleGridResult {
   disconnect: () => Promise<void>;
   drawShape: (bitmap: Bitmap) => Promise<void>;
   clear: () => Promise<void>;
-  /**
-   * Subscribe to live dot-state changes (full 8x8 snapshot each time).
-   * Returns an unsubscribe function. No-op (returns a no-op unsubscribe)
-   * if called before connect() succeeds.
-   */
-  subscribe: (cb: (state: boolean[][]) => void) => () => void;
-  /** Snapshot of current dot state. Empty/all-false if not connected. */
-  getState: () => boolean[][];
 }
 
 export function useBrailleGrid(): UseBrailleGridResult {
-  const gridRef = useRef<BrailleGrid | null>(null);
+  const gridRef = useRef<GridDevice | null>(null);
   const [state, setState] = useState<BrailleGridConnectionState>(() =>
-    WebSerialTransport.isSupported() ? 'disconnected' : 'unsupported'
+    (WebHidGrid.isSupported() || WebSerialTransport.isSupported()) ? 'disconnected' : 'unsupported'
   );
   const [error, setError] = useState<string | null>(null);
 
   const connect = useCallback(async () => {
-    if (!WebSerialTransport.isSupported()) {
+    if (!WebHidGrid.isSupported() && !WebSerialTransport.isSupported()) {
       setState('unsupported');
       return;
     }
     setState('connecting');
     setError(null);
     try {
-      const transport = new WebSerialTransport();
-      await transport.requestPort(); // shows the browser's device picker
-      const grid = new BrailleGrid(transport);
-      await grid.connect();
-      await grid.safeState();
+      let grid: GridDevice;
+      if (WebHidGrid.isSupported()) {
+        // Preferred: the board's USB HID Braille interface (autostart firmware).
+        const hid = new WebHidGrid();
+        await hid.requestDevice(); // shows the browser's device picker
+        await hid.connect();
+        grid = hid;
+      } else {
+        // Legacy: serial REPL (only works if the HID firmware is NOT running).
+        const transport = new WebSerialTransport();
+        await transport.requestPort();
+        const serial = new BrailleGrid(transport);
+        await serial.connect();
+        await serial.safeState();
+        grid = serial;
+      }
       await grid.allDown(); // start every lesson from a known, blank grid
       gridRef.current = grid;
       setState('connected');
@@ -88,16 +93,5 @@ export function useBrailleGrid(): UseBrailleGridResult {
     await gridRef.current.allDown();
   }, []);
 
-  const subscribe = useCallback((cb: (state: boolean[][]) => void) => {
-    const grid = gridRef.current;
-    if (!grid) return () => {};
-    grid.onChange(cb);
-    return () => grid.offChange(cb);
-  }, []);
-
-  const getState = useCallback(() => {
-    return gridRef.current?.getState() ?? [];
-  }, []);
-
-  return { state, error, connect, disconnect, drawShape, clear, subscribe, getState };
+  return { state, error, connect, disconnect, drawShape, clear };
 }

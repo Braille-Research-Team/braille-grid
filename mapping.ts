@@ -98,3 +98,28 @@ export function cellDotToPixel(cell: number, dot: number): PixelPosition {
 
 /** An 8x8 grid of truthy/falsy values; truthy = dot raised. */
 export type Bitmap = ReadonlyArray<ReadonlyArray<boolean | 0 | 1>>;
+
+/**
+ * Encode an 8x8 bitmap as the 8 cell bytes the device's USB HID Braille
+ * report carries: byte i = cell i+1, bit (dot-1) set = that dot raised
+ * (dot 1 = bit0 ... dot 8 = bit7, same as Unicode braille patterns).
+ * This is the exact inverse of the firmware's decode_row().
+ */
+export function bitmapToCellBytes(bitmap: Bitmap): number[] {
+  if (bitmap.length !== GRID_ROWS) {
+    throw new Error(`expected an ${GRID_ROWS}x${GRID_COLS} array`);
+  }
+  const bytes = Array(8).fill(0);
+  for (let row = 0; row < GRID_ROWS; row++) {
+    if (bitmap[row].length !== GRID_COLS) {
+      throw new Error(`expected an ${GRID_ROWS}x${GRID_COLS} array`);
+    }
+    for (let col = 0; col < GRID_COLS; col++) {
+      if (bitmap[row][col]) {
+        const { cell, dot } = pixelToCellDot(row, col);
+        bytes[cell - 1] |= 1 << (dot - 1);
+      }
+    }
+  }
+  return bytes;
+}

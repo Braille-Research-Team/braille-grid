@@ -16,7 +16,13 @@ import type { GridDevice } from './gridDevice';
 
 const BRAILLE_USAGE_PAGE = 0x41;
 const BRAILLE_USAGE = 0x01;
-const REPORT_ID = 1;
+// Report 1 is the screen-reader braille row; report 2 is DotQuest's shape
+// channel, which the firmware lets take priority over report 1 (a "lease");
+// report 3 releases the display back to the screen reader.
+const REPORT_SHAPE = 2;
+const REPORT_RELEASE = 3;
+// Firmware drops the lease after 10 s of silence, so renew well inside that.
+const HEARTBEAT_MS = 4000;
 // Raspberry Pi Pico running MicroPython's USB stack (as seen on our board).
 const PICO_VENDOR_ID = 0x2e8a;
 
@@ -24,6 +30,8 @@ export class WebHidGrid implements GridDevice {
   private device: HIDDevice | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private state: boolean[][] = WebHidGrid.blank(false);
+  private lastCells: number[] | null = null;
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
   private changeListeners = new Set<(state: boolean[][]) => void>();
 
   private static blank(v: boolean): boolean[][] {
@@ -69,14 +77,38 @@ export class WebHidGrid implements GridDevice {
   }
 
   async disconnect(): Promise<void> {
+    this.stopHeartbeat();
+    this.lastCells = null;
+    try {
+      // Hand the display back to the screen reader.
+      if (this.device?.opened) await this.device.sendReport(REPORT_RELEASE, new Uint8Array([0]));
+    } catch {
+      // best-effort; the firmware lease times out on its own
+    }
     if (this.device?.opened) await this.device.close();
     this.device = null;
   }
 
+  private startHeartbeat(): void {
+    if (this.heartbeat) return;
+    // Resending an identical frame pulses nothing on the board (it diffs),
+    // it only renews the lease so the screen reader can't take over mid-lesson.
+    this.heartbeat = setInterval(() => {
+      if (this.lastCells) this.sendCells(this.lastCells).catch(() => undefined);
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
+  }
+
   private sendCells(bytes: number[]): Promise<void> {
+    this.lastCells = bytes;
+    this.startHeartbeat();
     const run = async () => {
       if (!this.device?.opened) throw new Error('Braille grid is not connected.');
-      await this.device.sendReport(REPORT_ID, new Uint8Array(bytes));
+      await this.device.sendReport(REPORT_SHAPE, new Uint8Array(bytes));
     };
     const result = this.queue.then(run, run) as Promise<void>;
     this.queue = result.catch(() => undefined);

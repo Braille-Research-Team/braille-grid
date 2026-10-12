@@ -11,7 +11,7 @@
 
 /// <reference path="./webHid.d.ts" />
 
-import { Bitmap, bitmapToCellBytes } from './mapping';
+import { Bitmap, bitmapToCellBytes, GRID_ROWS, GRID_COLS } from './mapping';
 import type { GridDevice } from './gridDevice';
 
 const BRAILLE_USAGE_PAGE = 0x41;
@@ -23,6 +23,30 @@ const PICO_VENDOR_ID = 0x2e8a;
 export class WebHidGrid implements GridDevice {
   private device: HIDDevice | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  private state: boolean[][] = WebHidGrid.blank(false);
+  private changeListeners = new Set<(state: boolean[][]) => void>();
+
+  private static blank(v: boolean): boolean[][] {
+    return Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(v));
+  }
+
+  onChange(cb: (state: boolean[][]) => void): void {
+    this.changeListeners.add(cb);
+  }
+
+  offChange(cb: (state: boolean[][]) => void): void {
+    this.changeListeners.delete(cb);
+  }
+
+  /** Snapshot of the current dot state (8x8, true = raised). */
+  getState(): boolean[][] {
+    return this.state.map((row) => [...row]);
+  }
+
+  private setState(next: boolean[][]): void {
+    this.state = next;
+    for (const cb of this.changeListeners) cb(this.getState());
+  }
 
   static isSupported(): boolean {
     return typeof navigator !== 'undefined' && 'hid' in navigator;
@@ -61,13 +85,16 @@ export class WebHidGrid implements GridDevice {
 
   async drawShape(bitmap: Bitmap): Promise<void> {
     await this.sendCells(bitmapToCellBytes(bitmap));
+    this.setState(bitmap.map((row) => row.map((v) => !!v)));
   }
 
   async allDown(): Promise<void> {
     await this.sendCells(Array(8).fill(0));
+    this.setState(WebHidGrid.blank(false));
   }
 
   async allUp(): Promise<void> {
     await this.sendCells(Array(8).fill(0xff));
+    this.setState(WebHidGrid.blank(true));
   }
 }

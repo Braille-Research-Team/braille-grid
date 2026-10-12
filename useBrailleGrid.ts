@@ -29,6 +29,14 @@ export interface UseBrailleGridResult {
   disconnect: () => Promise<void>;
   drawShape: (bitmap: Bitmap) => Promise<void>;
   clear: () => Promise<void>;
+  /**
+   * Subscribe to live dot-state changes (full 8x8 snapshot each time).
+   * Returns an unsubscribe function. No-op (returns a no-op unsubscribe)
+   * if called before connect() succeeds.
+   */
+  subscribe: (cb: (state: boolean[][]) => void) => () => void;
+  /** Snapshot of current dot state. Empty/all-false if not connected. */
+  getState: () => boolean[][];
 }
 
 export function useBrailleGrid(): UseBrailleGridResult {
@@ -93,5 +101,16 @@ export function useBrailleGrid(): UseBrailleGridResult {
     await gridRef.current.allDown();
   }, []);
 
-  return { state, error, connect, disconnect, drawShape, clear };
+  const subscribe = useCallback((cb: (state: boolean[][]) => void) => {
+    const grid = gridRef.current;
+    if (!grid) return () => {};
+    grid.onChange(cb);
+    return () => grid.offChange(cb);
+  }, []);
+
+  const getState = useCallback(() => {
+    return gridRef.current?.getState() ?? [];
+  }, []);
+
+  return { state, error, connect, disconnect, drawShape, clear, subscribe, getState };
 }

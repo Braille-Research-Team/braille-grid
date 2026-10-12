@@ -7,4 +7,8 @@ export interface GridDevice {
   drawShape(bitmap: Bitmap): Promise<void>;
   allDown(): Promise<void>;
   allUp(): Promise<void>;
+  /** Live dot-state mirroring (used by the overlay bridge). */
+  onChange(cb: (state: boolean[][]) => void): void;
+  offChange(cb: (state: boolean[][]) => void): void;
+  getState(): boolean[][];
 }
